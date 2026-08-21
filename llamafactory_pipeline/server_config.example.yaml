@@ -1,0 +1,13 @@
+# 复制为 server_config.yaml 并填入真实值 (server_config.yaml 已 gitignore)。
+# 环境变量同名项 (TRAIN_SSH_TARGET 等) 若设置会覆盖此处。
+
+ssh_target: user@gpu-host        # 必填, user@host
+ssh_port: "22"
+ssh_identity: ~/.ssh/id_ed25519  # 可选; 留空走 ssh-agent/默认配置
+
+remote_root: /data/lf_jobs       # 必填, 远端任务根目录
+llamafactory_dir: /opt/LLaMA-Factory  # 必填, 服务器 LlamaFactory 目录
+
+docker_container: ""             # 可选; 填容器名则走 docker exec, 留空在宿主机跑
+# 宿主机模式下激活训练环境 (非交互 SSH 不会自动 activate); 用容器可忽略:
+remote_prefix: ""                # 如 "source ~/miniconda3/etc/profile.d/conda.sh && conda activate lf"

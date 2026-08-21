@@ -1,0 +1,6 @@
+generation:
+  api_base: "http://127.0.0.1:8003/v1"
+  model: "/model"
+  final:
+    api_base: "http://127.0.0.1:8003/v1"
+    model: "/model"

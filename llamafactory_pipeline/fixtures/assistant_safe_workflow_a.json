@@ -1,0 +1,13 @@
+{
+  "source_workflow": "wf_20260821T025145Z_f68c20",
+  "sanitized": true,
+  "scenarios": {
+    "9b_then_fc": {
+      "messages": ["9B model request", "function-call task"],
+      "state_sequence": ["collecting_requirements", "data_plan_ready"],
+      "approvals": ["start_datagen"],
+      "premature_execution": true,
+      "note": "Historical state/action facts only; no prompts, paths, records, or secrets."
+    }
+  }
+}

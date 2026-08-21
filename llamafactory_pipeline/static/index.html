@@ -1,0 +1,1529 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>LlamaFactory 远程训练</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #080d1a;
+    --bg-2: #0c1426;
+    --panel: #0f1a30;
+    --panel-2: #111d36;
+    --border: #1c2740;
+    --border-2: #283450;
+    --text: #e6edf7;
+    --muted: #5d6b85;
+    --muted-2: #93a1bc;
+    --accent: #5b9dff;
+    --accent-2: #3b82f6;
+    --accent-glow: rgba(59,130,246,.35);
+    --ok: #22c55e;
+    --warn: #f59e0b;
+    --err: #ef4444;
+    --shadow: 0 8px 30px rgba(0,0,0,.45);
+    --shadow-sm: 0 2px 10px rgba(0,0,0,.35);
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    font: 13px/1.55 -apple-system, "Segoe UI", "PingFang SC", sans-serif;
+    color: var(--text);
+    -webkit-font-smoothing: antialiased;
+    background:
+      radial-gradient(1200px 600px at 80% -10%, rgba(59,130,246,.10), transparent 60%),
+      radial-gradient(900px 500px at -10% 110%, rgba(139,92,246,.08), transparent 55%),
+      var(--bg);
+    background-attachment: fixed;
+  }
+
+  /* ── 左侧栏 ── */
+  .layout { display: flex; min-height: 100vh; }
+  aside {
+    flex: 0 0 232px;
+    background: linear-gradient(180deg, #0b1326 0%, #070c1a 100%);
+    border-right: 1px solid var(--border);
+    padding: 22px 14px 16px;
+    position: sticky; top: 0; height: 100vh;
+    display: flex; flex-direction: column;
+    backdrop-filter: blur(6px);
+  }
+  .brand { padding: 2px 8px 18px; margin-bottom: 12px; border-bottom: 1px solid var(--border); }
+  .brand .logo { font-size: 16px; font-weight: 700; letter-spacing: .4px; display: flex; align-items: center; gap: 7px; }
+  .brand .logo .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--accent); box-shadow: 0 0 10px var(--accent-glow);
+  }
+  .brand .sub { color: var(--muted); font-size: 11px; margin-top: 5px; letter-spacing: .2px; }
+
+  .nav { display: flex; flex-direction: column; gap: 4px; }
+  .nav button {
+    background: transparent; color: var(--muted-2);
+    border: 0; border-radius: 9px; padding: 10px 12px;
+    font-size: 13px; text-align: left; cursor: pointer; position: relative;
+    display: flex; align-items: center; gap: 11px;
+    transition: background .18s, color .18s, transform .1s;
+  }
+  .nav button:hover { background: rgba(91,157,255,.08); color: var(--text); }
+  .nav button:active { transform: translateX(1px); }
+  .nav button.active {
+    background: linear-gradient(100deg, rgba(59,130,246,.22), rgba(59,130,246,.06));
+    color: #fff;
+  }
+  .nav button.active::before {
+    content: ""; position: absolute; left: -14px; top: 18%; bottom: 18%;
+    width: 3px; border-radius: 0 3px 3px 0;
+    background: var(--accent); box-shadow: 0 0 8px var(--accent-glow);
+  }
+  .nav button .ico { width: 17px; height: 17px; display: flex; align-items: center; justify-content: center; opacity: .85; }
+  .nav button .ico svg { width: 16px; height: 16px; }
+  .nav button.active .ico { opacity: 1; color: var(--accent); }
+
+  .side-foot { margin-top: auto; padding-top: 14px; border-top: 1px solid var(--border); }
+  .side-disk { color: var(--muted); font-size: 11px; padding: 0 8px; display: flex; align-items: center; gap: 6px; }
+  .side-disk::before { content: "◷"; opacity: .6; }
+
+  /* ── 主内容 ── */
+  .content { flex: 1; min-width: 0; padding: 30px 34px 48px; }
+  .view-head { margin-bottom: 22px; display: flex; align-items: center; gap: 12px; }
+  .view-head .bar { width: 4px; height: 22px; border-radius: 3px;
+    background: linear-gradient(180deg, var(--accent), #8b5cf6); box-shadow: 0 0 10px var(--accent-glow); }
+  .view-head h2 { margin: 0 0 3px; font-size: 18px; font-weight: 650; letter-spacing: .2px; }
+  .view-head .desc { color: var(--muted); font-size: 12px; }
+
+  main { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 18px; align-items: start; }
+  @media (max-width: 1100px) { main { grid-template-columns: 1fr; } }
+  section {
+    background: linear-gradient(180deg, var(--panel) 0%, var(--panel-2) 100%);
+    border: 1px solid var(--border); border-radius: 14px; padding: 18px 20px;
+    box-shadow: var(--shadow-sm);
+  }
+  section.panel { background: linear-gradient(180deg, var(--bg-2), #0a1120); }
+  section h3 { margin: 0 0 12px; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+  section h3::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); opacity: .8; }
+
+  fieldset { border: 1px solid var(--border-2); border-radius: 11px; margin: 0 0 14px; padding: 11px 15px 13px; background: rgba(8,13,26,.55); }
+  legend { color: var(--accent); font-size: 11px; padding: 0 7px; cursor: pointer; font-weight: 500; letter-spacing: .4px; text-transform: uppercase; }
+
+  .row { display: flex; align-items: center; gap: 10px; margin: 8px 0; }
+  .row label { flex: 0 0 200px; color: var(--muted-2); font-size: 12px; }
+  .row input, .row select {
+    flex: 1; background: #070d1c; border: 1px solid var(--border-2); color: var(--text);
+    border-radius: 8px; padding: 7px 11px; font-size: 12px; transition: border .15s, box-shadow .15s;
+  }
+  .row input:focus, .row select:focus { outline: 0; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(59,130,246,.15); }
+  .row input[readonly] { opacity: .5; }
+
+  button {
+    background: linear-gradient(180deg, var(--accent-2), #1d4ed8); color: #fff; border: 0; border-radius: 9px;
+    padding: 9px 20px; font-size: 13px; cursor: pointer; font-weight: 550;
+    transition: background .15s, transform .05s, box-shadow .15s;
+    box-shadow: 0 2px 8px rgba(37,99,235,.25);
+  }
+  button:hover { background: linear-gradient(180deg, var(--accent), #2563eb); box-shadow: 0 3px 12px var(--accent-glow); }
+  button:active { transform: translateY(1px); }
+  button:disabled { opacity: .4; cursor: default; box-shadow: none; }
+  button.ghost { background: #1a2540; color: var(--muted-2); font-weight: 400; box-shadow: none; }
+  button.ghost:hover { background: #243352; color: var(--text); }
+
+  .status { font-size: 12px; margin: 9px 0; color: var(--muted-2); }
+  .badge { display: inline-flex; align-items: center; gap: 5px; padding: 2px 10px 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 500; }
+  .badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: .9; }
+  .b-running { background: rgba(29,78,216,.25); color: #93c5fd; } .b-succeeded { background: rgba(21,128,61,.22); color: #86efac; }
+  .b-failed { background: rgba(185,28,28,.22); color: #fca5a5; } .b-unknown,.b-not_found,.b-missing { background: rgba(71,85,105,.3); color: #cbd5e1; }
+  .b-interrupted { background: rgba(161,98,7,.22); color: #fcd34d; } .b-submitting { background: rgba(161,98,7,.22); color: #fcd34d; }
+  .b-restarting { background: rgba(109,40,217,.25); color: #c4b5fd; }
+
+  #log, .logbox {
+    background: #04070e; color: #d1fae5; font: 12px/1.55 ui-monospace, "SF Mono", monospace;
+    height: 460px; overflow: auto; padding: 14px; border-radius: 10px;
+    white-space: pre-wrap; border: 1px solid var(--border); box-shadow: inset 0 1px 8px rgba(0,0,0,.5);
+  }
+  .file { border: 1px solid var(--border-2); border-radius: 11px; padding: 13px; margin-bottom: 12px; background: rgba(8,13,26,.5); }
+  .hint { color: var(--muted); font-size: 11px; }
+  textarea {
+    width: 100%; background: #070d1c; border: 1px solid var(--border-2); color: var(--text);
+    border-radius: 9px; padding: 9px 11px; font-size: 12px; min-height: 70px; resize: vertical; transition: border .15s, box-shadow .15s;
+  }
+  textarea:focus { outline: 0; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(59,130,246,.15); }
+  .mut { border: 1px solid var(--border); border-radius: 9px; padding: 9px 11px; margin-bottom: 10px; background: #070d1c; }
+  .mut h4 { margin: 0 0 7px; font-size: 12px; color: var(--accent); }
+  #report { background: #070d1c; border: 1px solid var(--border); border-radius: 9px; padding: 13px;
+            font: 12px/1.5 ui-monospace, monospace; white-space: pre-wrap; max-height: 300px; overflow: auto; }
+
+  /* GPU 侧栏小卡 */
+  .gpu-mini { display: flex; flex-direction: column; gap: 7px; margin-top: 12px; }
+  .gpu-card { background: #070d1c; border: 1px solid var(--border); border-radius: 8px; padding: 7px 9px; transition: border .15s; }
+  .gpu-card:hover { border-color: var(--border-2); }
+  .gpu-card .top { display: flex; justify-content: space-between; gap: 6px; font-size: 10px; color: var(--muted-2); margin-bottom: 5px; }
+  .gpu-card .top .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .gpu-bar { height: 5px; background: #131c33; border-radius: 3px; overflow: hidden; }
+  .gpu-bar > i { display: block; height: 100%; border-radius: 3px; transition: width .4s ease; }
+  .gpu-meta { display: flex; justify-content: space-between; font-size: 9px; color: var(--muted); margin-top: 4px; }
+
+  /* 列表行 hover */
+  .mut > .row, #job-list > .row, #deploy-list > .row, #data-list > .row, #ckpt-list > .row {
+    border-radius: 7px; padding: 5px 7px; transition: background .12s;
+  }
+  .mut > .row:hover, #job-list > .row:hover, #deploy-list > .row:hover, #data-list > .row:hover, #ckpt-list > .row:hover {
+    background: rgba(91,157,255,.06);
+  }
+
+  /* 滚动条 */
+  ::-webkit-scrollbar { width: 9px; height: 9px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 5px; border: 2px solid transparent; background-clip: padding-box; }
+  ::-webkit-scrollbar-thumb:hover { background: #334155; background-clip: padding-box; }
+
+  /* 个人训练助手 */
+  .assistant-layout {
+    grid-column: 1 / -1; display: grid;
+    grid-template-columns: minmax(190px, .7fr) minmax(340px, 1.5fr) minmax(280px, 1fr);
+    gap: 18px; width: 100%; min-width: 0;
+    background: transparent; border: 0; padding: 0; box-shadow: none;
+  }
+  .assistant-layout .card {
+    min-width: 0; background: linear-gradient(180deg, var(--panel), var(--panel-2));
+    border: 1px solid var(--border); border-radius: 14px; padding: 16px;
+    box-shadow: var(--shadow-sm);
+  }
+  .assistant-workflows button { width: 100%; margin-bottom: 8px; text-align: left; }
+  .assistant-workflow-row { width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .assistant-chat { display: flex; flex-direction: column; min-height: 620px; }
+  #as-messages { flex: 1; max-height: 520px; overflow: auto; padding-right: 5px; }
+  .assistant-message { margin: 0 0 10px; padding: 9px 11px; border-radius: 9px; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .assistant-message.user { background: rgba(59,130,246,.16); margin-left: 12%; }
+  .assistant-message.assistant { background: #070d1c; margin-right: 12%; }
+  .assistant-chat .row { align-items: flex-end; }
+  .assistant-chat .row textarea { min-width: 0; }
+  .assistant-detail { min-width: 0; display: flex; flex-direction: column; gap: 14px; }
+  .assistant-detail pre { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--muted-2); }
+  .assistant-block { border-top: 1px solid var(--border); padding-top: 10px; margin-top: 10px; }
+  .assistant-block h4 { margin: 0 0 7px; color: var(--accent); }
+  .assistant-approval { border: 1px solid var(--border-2); border-radius: 9px; padding: 10px; margin-top: 9px; }
+  .assistant-approval .row { flex-wrap: wrap; }
+  .assistant-error { color: #fca5a5; white-space: pre-wrap; }
+  .assistant-cancel { width: 100%; margin: 4px 0 12px; border-color: #7f1d1d; background: rgba(127,29,29,.25); color: #fecaca; }
+  .assistant-cancel:disabled { opacity: .75; cursor: wait; }
+  .assistant-timeline { display: flex; flex-direction: column; gap: 10px; }
+  .assistant-step { position: relative; border: 1px solid var(--border); border-left: 4px solid #334155; border-radius: 10px; padding: 11px; background: rgba(7,13,28,.72); }
+  .assistant-step.status-active { border-left-color: var(--accent); }
+  .assistant-step.status-needs_confirmation { border-left-color: #f59e0b; }
+  .assistant-step.status-succeeded { border-left-color: #22c55e; }
+  .assistant-step.status-blocked, .assistant-step.status-failed { border-left-color: #ef4444; }
+  .assistant-step.status-cancelling, .assistant-step.status-cancelled { border-left-color: #f97316; }
+  .assistant-step-header { display: grid; grid-template-columns: 24px minmax(0,1fr) auto; gap: 8px; align-items: center; }
+  .assistant-step-header h4 { margin: 0; color: var(--text); font-size: 14px; }
+  .assistant-step-number { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: #172036; color: var(--muted-2); font-size: 11px; }
+  .assistant-step-status { color: var(--muted-2); font-size: 11px; white-space: nowrap; }
+  .assistant-step-summary { margin: 8px 0 0 32px; color: var(--muted-2); font-size: 12px; }
+  .assistant-progress-text { margin: 9px 0 5px 32px; font-size: 12px; color: #bfdbfe; }
+  .assistant-progress { height: 7px; margin-left: 32px; overflow: hidden; border-radius: 5px; background: #111827; }
+  .assistant-progress > i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #2563eb, #22d3ee); transition: width .3s ease; }
+  .assistant-step > small.hint { display: block; margin: 5px 0 0 32px; }
+  .assistant-issues { margin: 9px 0 0 32px; padding-left: 18px; color: #fca5a5; font-size: 12px; }
+  .assistant-artifacts { margin: 9px 0 0 32px; padding-left: 17px; font-size: 12px; }
+  .assistant-artifacts li { margin: 5px 0; overflow-wrap: anywhere; }
+  .assistant-artifacts a { color: #93c5fd; }
+  .assistant-artifact-hash { display: block; margin-top: 2px; color: var(--muted); font-size: 9px; }
+  .assistant-step-actions { display: flex; gap: 7px; flex-wrap: wrap; margin: 9px 0 0 32px; }
+  .assistant-step-actions button { padding: 6px 9px; font-size: 11px; }
+  .assistant-requirements { margin: 10px 0 0 32px; }
+  .assistant-requirements h4 { margin: 0 0 7px; color: var(--muted-2); font-size: 12px; }
+  .assistant-requirement-row { padding: 7px 0; border-top: 1px solid rgba(71,85,105,.45); }
+  .assistant-requirement-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 11px; }
+  .assistant-requirement-value { margin-top: 4px; color: var(--muted-2); font-size: 11px; overflow-wrap: anywhere; }
+  .assistant-source { flex: none; padding: 2px 6px; border: 1px solid #475569; border-radius: 999px; color: #cbd5e1; font-size: 9px; }
+  .assistant-source.user { border-color: #166534; color: #86efac; }
+  .assistant-source.default { border-color: #1d4ed8; color: #93c5fd; }
+  .assistant-source.assistant_assumption { border-color: #92400e; color: #fcd34d; }
+  .assistant-tech-details { margin-top: 8px; border-top: 1px solid var(--border); padding-top: 8px; }
+  .assistant-tech-details summary { cursor: pointer; color: var(--muted-2); font-size: 12px; }
+  .assistant-tech-details pre { max-height: 320px; overflow: auto; font-size: 10px; }
+  .assistant-technical { margin-top: 12px; }
+  #as-events { max-height: 300px; overflow: auto; }
+  button:focus-visible, textarea:focus-visible, input:focus-visible, select:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 2px;
+  }
+  @media (max-width: 1100px) {
+    .assistant-layout { grid-template-columns: 1fr; }
+    .assistant-chat { min-height: 480px; }
+  }
+</style>
+</head>
+<body>
+<div class="layout">
+<aside>
+  <div class="brand">
+    <div class="logo">LF<span class="dot">·</span>Studio</div>
+    <div class="sub">训练 · 评测 · 部署</div>
+  </div>
+  <nav class="nav" id="nav">
+    <button id="tab-assistant" onclick="switchTab('assistant')"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19v-2a4 4 0 0 1 4-4h8a4 4 0 0 1 4 4v2"/><circle cx="12" cy="7" r="4"/><path d="M18 3v4M16 5h4"/></svg></span>训练助手</button>
+    <button id="tab-train" class="active" onclick="switchTab('train')"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 17l6-6 4 4 7-7"/><path d="M14 8h6v6"/></svg></span>训练</button>
+    <button id="tab-eval" onclick="switchTab('eval')"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3 8-8"/><path d="M20 12v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9"/></svg></span>评测</button>
+    <button id="tab-datagen" onclick="switchTab('datagen')"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/><circle cx="12" cy="12" r="3"/></svg></span>数据生成</button>
+    <button id="tab-deploy" onclick="switchTab('deploy')"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 7h14M5 12h14M5 17h14"/><rect x="3" y="4" width="4" height="3" rx="1"/><rect x="3" y="9" width="4" height="3" rx="1"/><rect x="3" y="14" width="4" height="3" rx="1"/></svg></span>模型部署</button>
+    <button id="tab-data" onclick="switchTab('data')"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg></span>数据管理</button>
+  </nav>
+  <div class="side-foot">
+    <div class="side-disk" id="disk">磁盘: …</div>
+    <div class="gpu-mini" id="gpu-panel"><span class="hint">显卡: 加载中…</span></div>
+  </div>
+</aside>
+<div class="content">
+  <div class="view-head" id="view-head">
+    <div class="bar"></div>
+    <div>
+      <h2 id="view-title">训练</h2>
+      <div class="desc" id="view-desc">配置参数与数据, 经 SSH 在服务器启动 LlamaFactory 训练。</div>
+    </div>
+  </div>
+
+<main id="view-assistant" style="display:none">
+  <section class="assistant-layout">
+    <div class="card assistant-workflows">
+      <button id="as-new" type="button">新建训练任务</button>
+      <div id="as-workflows"></div>
+    </div>
+    <div class="card assistant-chat">
+      <div id="as-messages" aria-live="polite"></div>
+      <div class="row">
+        <textarea id="as-input" rows="3" placeholder="说明希望改善的行为、基座模型和数据来源"></textarea>
+        <button id="as-send" type="button">发送</button>
+      </div>
+    </div>
+    <div class="assistant-detail">
+      <section id="as-current" class="card"><span class="hint">选择或创建一个训练任务</span></section>
+      <section id="as-events" class="card"><span class="hint">暂无事件</span></section>
+    </div>
+  </section>
+</main>
+
+<main id="view-train">
+  <section>
+    <div class="file">
+      <div class="row">
+        <label>数据来源</label>
+        <select id="datasrc" onchange="toggleDataSrc()">
+          <option value="upload">上传文件</option>
+          <option value="datagen">从生成任务导入</option>
+          <option value="dataset">从数据集库选</option>
+        </select>
+      </div>
+      <div id="src-upload" class="row">
+        <label>训练数据 (.json/.jsonl, ≤500MB)</label>
+        <input type="file" id="datafile" accept=".json,.jsonl" />
+      </div>
+      <div id="src-datagen" class="row" style="display:none">
+        <label>选择已完成的生成任务</label>
+        <select id="datagen-pick"><option value="">— 加载中 —</option></select>
+        <button class="ghost" type="button" onclick="loadDatagenForTrain()" style="margin-left:8px">刷新</button>
+      </div>
+      <div id="src-dataset" class="row" style="display:none">
+        <label>选择已注册训练集</label>
+        <select id="dataset-pick"><option value="">— 加载中 —</option></select>
+        <button class="ghost" type="button" onclick="loadDatasetsForTrain()" style="margin-left:8px">刷新</button>
+      </div>
+      <div class="hint">ShareGPT 格式: conversations(from/value) 或 messages(role/content)</div>
+      <div class="row" style="margin-top:8px">
+        <label>GPU (CUDA_VISIBLE_DEVICES)</label>
+        <input type="text" id="gpus" placeholder="留空=默认全部; 单卡填 0; 多卡填 0,1" />
+      </div>
+      <div class="hint">多卡会自动启用 FORCE_TORCHRUN 分布式训练</div>
+    </div>
+    <form id="form"></form>
+    <button id="submit">上传并启动训练</button>
+  </section>
+  <section class="panel">
+    <div class="row">
+      <button class="ghost" id="reconnect">重连日志</button>
+      <button class="ghost" id="refresh">刷新状态</button>
+      <button class="ghost" id="stop">停止训练</button>
+      <button class="ghost" id="toggle-jobs">历史任务</button>
+    </div>
+    <div id="job-list" class="mut" style="display:none;max-height:170px;overflow:auto">加载中…</div>
+    <div class="status">任务: <span id="jobid">—</span> · <span id="badge" class="badge b-unknown">未开始</span></div>
+    <div class="status">Loss: <span id="loss-latest">—</span> · 进度 <span id="loss-prog">—</span></div>
+    <canvas id="loss-chart" height="150" style="width:100%;background:#000;border-radius:6px;margin-bottom:8px"></canvas>
+    <div class="status">学习率: <span id="lr-latest">—</span></div>
+    <canvas id="lr-chart" height="110" style="width:100%;background:#000;border-radius:6px;margin-bottom:8px"></canvas>
+    <div id="log"></div>
+  </section>
+  <section class="panel">
+    <div class="row">
+      <h3 style="margin:0">Checkpoint / 产物管理</h3>
+      <button class="ghost" type="button" onclick="loadCheckpoints()">刷新列表</button>
+    </div>
+    <div class="hint">选中当前训练任务后, 可查看其 checkpoint, 用于续训 / 下载 / 删除。</div>
+    <div id="ckpt-list" class="mut" style="max-height:200px;overflow:auto">点"刷新列表"加载</div>
+  </section>
+</main>
+
+<main id="view-eval" style="display:none">
+  <section>
+    <fieldset>
+      <legend>任务类型</legend>
+      <label class="hint"><input type="checkbox" id="t-fc" checked /> function call</label>
+      &nbsp;&nbsp;
+      <label class="hint"><input type="checkbox" id="t-subj" checked /> 主观任务</label>
+    </fieldset>
+
+    <fieldset>
+      <legend>被测模型</legend>
+      <div class="mut">
+        <h4>微调模型 (来自已完成训练任务)</h4>
+        <div class="row"><label>名称</label><input id="ft-name" placeholder="如 sft_v1" /></div>
+        <div class="row"><label>训练任务 ID</label><input id="ft-job" placeholder="训练页产生的 job_id" /></div>
+        <div class="hint">留空则不加微调模型</div>
+      </div>
+      <div class="mut">
+        <h4>基座模型 (服务器绝对路径, 每行一个 name=path)</h4>
+        <textarea id="base-models" placeholder="base9b=/data/wangzhengyan/Qwen3.5-9B/"></textarea>
+      </div>
+      <div class="row"><label>GPU</label><input id="e-gpus" placeholder="留空=全部; 0 或 0,1" /></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>评测集</legend>
+      <div class="row"><label>FC 评测集 (.json/.jsonl)</label><input type="file" id="fc-file" accept=".json,.jsonl" /></div>
+      <div class="row"><label>主观评测集 (.json/.jsonl)</label><input type="file" id="subj-file" accept=".json,.jsonl" /></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Judge Prompt (可编辑)</legend>
+      <div class="hint">FC 参数打分</div>
+      <textarea id="p-fc"></textarea>
+      <div class="hint" style="margin-top:6px">主观打分</div>
+      <textarea id="p-subj"></textarea>
+    </fieldset>
+    <button id="e-submit">上传并启动推理</button>
+  </section>
+
+  <section class="panel">
+    <div class="row">
+      <button class="ghost" id="e-reconnect">重连日志</button>
+      <button class="ghost" id="e-refresh">刷新状态</button>
+      <button id="e-score">拉回并打分</button>
+    </div>
+    <div class="status">评测: <span id="e-id">—</span> · <span id="e-badge" class="badge b-unknown">未开始</span></div>
+    <div id="e-logbox" class="logbox" style="height:240px"></div>
+    <div class="hint" style="margin:8px 0 4px">报告</div>
+    <div id="report">尚无报告</div>
+  </section>
+</main>
+
+<main id="view-datagen" style="display:none">
+  <section>
+    <fieldset>
+      <legend>生成配置</legend>
+      <div class="row"><label>微调数据类型</label>
+        <select id="dg-finetune"><option value="sft">SFT 监督微调</option><option value="dpo">DPO 偏好微调</option></select>
+      </div>
+      <div class="row"><label>任务类型</label>
+        <select id="dg-task"><option value="qa">通用问答 (接地知识库)</option><option value="fc">FC 路由 (改写现有种子)</option></select>
+      </div>
+      <div class="row"><label>目标数量 (接受后)</label><input type="number" id="dg-count" value="100" /></div>
+      <div class="row" data-task="qa"><label>生成模式</label><select id="dg-mode"><option value="single">单篇 (默认, 单个 chunk 出题)</option><option value="synthesis">多篇·综合 (跨文献拼接, used_docs≥2)</option><option value="consensus">多篇·共识 (多篇一致/差异)</option></select></div>
+      <div class="row" data-task="qa"><label>知识库源目录</label><input id="dg-kbdir" value="uploads" /></div>
+      <div class="row" data-task="qa"><label>chunk 最短长度</label><input type="number" id="dg-minlen" value="200" /></div>
+      <div class="row" data-task="fc"><label>FC 种子文件</label><input id="dg-seed" value="sft_data/router_fc/sft_router_fc_shougang_1160.json" /></div>
+      <div class="row dg-multi" data-task="qa"><label>Milvus collection</label><input id="dg-coll" value="kb_c2261879" /></div>
+      <div class="row dg-multi" data-task="qa"><label>每题文献数 n_docs</label><input type="number" id="dg-ndocs" value="3" /></div>
+      <div class="row dg-multi" data-task="qa"><label>邻居候选池 top_k</label><input type="number" id="dg-topk" value="20" /></div>
+      <div class="row"><label>temperature</label><input type="number" step="any" id="dg-temp" value="0.9" /></div>
+      <div class="row"><label>judge 最低分 (1-5)</label><input type="number" id="dg-minscore" value="4" /></div>
+      <div class="row" data-task="qa"><label>接地校验</label><select id="dg-ground"><option value="true">开</option><option value="false">关</option></select></div>
+      <div class="row"><label>去重余弦阈值</label><input type="number" step="any" id="dg-dedup" value="0.9" /></div>
+      <div class="row"><label>尝试上限倍数</label><input type="number" step="any" id="dg-mult" value="3" /></div>
+    </fieldset>
+    <fieldset>
+      <legend>Prompt (可编辑, 留空用默认)</legend>
+      <div class="hint">生成 prompt</div>
+      <textarea id="dg-genp"></textarea>
+      <div class="hint" style="margin-top:6px">judge prompt</div>
+      <textarea id="dg-judgep"></textarea>
+      <div class="dg-dpo" style="display:none">
+        <div class="hint" style="margin-top:10px">rejected 生成 prompt</div>
+        <textarea id="dg-rejectedp"></textarea>
+        <div class="hint" style="margin-top:6px">偏好对 Judge prompt</div>
+        <textarea id="dg-pairp"></textarea>
+      </div>
+    </fieldset>
+    <button id="dg-submit">启动生成</button>
+  </section>
+
+  <section class="panel">
+    <div class="row">
+      <button class="ghost" id="dg-reconnect">重连日志</button>
+      <button class="ghost" id="dg-refresh">刷新状态</button>
+      <button class="ghost" id="dg-stop">停止</button>
+      <a id="dg-download" class="ghost" style="text-decoration:none;padding:8px 16px;border-radius:6px;background:#334155;color:#fff;display:none">下载 output.json</a>
+    </div>
+    <div class="status">任务: <span id="dg-id">—</span> · 类型 <span id="dg-type">—</span> · <span id="dg-badge" class="badge b-unknown">未开始</span></div>
+    <div class="status">进度: <span id="dg-prog">—</span></div>
+    <div id="dg-logbox" class="logbox" style="height:260px"></div>
+    <div class="hint" style="margin:8px 0 4px">报告</div>
+    <div id="dg-report">尚无报告</div>
+  </section>
+</main>
+
+<main id="view-deploy" style="display:none">
+  <section>
+    <h3 style="margin:0 0 8px">部署新模型 (vLLM)</h3>
+    <div id="deploy-form" class="file"></div>
+    <button id="deploy-submit">启动部署</button>
+    <div class="hint">容器名自动加 vllm- 前缀; 模型权重需已在服务器 (按 host_model_path 挂载)。</div>
+  </section>
+  <section class="panel">
+    <div class="row">
+      <h3 style="margin:0">已部署容器</h3>
+      <button class="ghost" type="button" onclick="loadDeployList()">刷新</button>
+    </div>
+    <div id="deploy-list" class="mut" style="max-height:200px;overflow:auto">点"刷新"加载</div>
+  </section>
+  <section class="panel">
+    <div class="row">
+      <button class="ghost" type="button" id="dep-log-reconnect" onclick="connectDeployLog()">重连日志</button>
+      <span class="status">容器: <span id="dep-current">—</span></span>
+    </div>
+    <div id="dep-logbox" class="logbox" style="height:260px"></div>
+  </section>
+  <section class="panel">
+    <h3>推理监控</h3>
+    <div class="hint">选中运行中容器后, 每 4s 抓取 vLLM /metrics。</div>
+    <div id="dep-metrics" class="mut">选中容器后展示指标</div>
+  </section>
+  <section class="panel">
+    <h3>在线试玩</h3>
+    <div id="dep-chat" class="logbox" style="height:280px;white-space:pre-wrap"></div>
+    <div class="row" style="margin-top:8px">
+      <input id="dep-chat-input" placeholder="对部署的模型说点什么… (回车发送)" style="flex:1" />
+      <button id="dep-chat-send">发送</button>
+    </div>
+    <div class="hint">流式输出, 直连部署的 vLLM 端点; 需容器已就绪。</div>
+  </section>
+</main>
+
+<main id="view-data" style="display:none">
+  <section>
+    <h3 style="margin:0 0 8px">注册数据集 / 评测集</h3>
+    <div class="file">
+      <div class="row"><label>名称 (字母数字._-)</label><input id="ds-name" placeholder="如 shougang_qa_v1" /></div>
+      <div class="row"><label>类型</label><select id="ds-kind"><option value="train">训练集 (ShareGPT)</option><option value="eval">评测集 (FC/主观)</option></select></div>
+      <div class="row"><label>文件 (.json/.jsonl)</label><input type="file" id="ds-file" accept=".json,.jsonl" /></div>
+    </div>
+    <button id="ds-submit">注册</button>
+  </section>
+  <section class="panel">
+    <div class="row">
+      <h3 style="margin:0">数据集列表</h3>
+      <button class="ghost" type="button" onclick="loadDataList()">刷新</button>
+    </div>
+    <div id="data-list" class="mut" style="max-height:300px;overflow:auto">点"刷新"加载</div>
+  </section>
+</main>
+
+</div><!-- /content -->
+</div><!-- /layout -->
+
+<script src="/static/datagen.js"></script>
+<script src="/static/assistant.js"></script>
+<script>
+let SCHEMA = null, currentJob = localStorage.getItem("lf_job") || null, es = null;
+
+function switchTab(which) {
+  const TITLES = {
+    assistant:["个人训练助手", "从需求、数据构建、训练预检到 A/B 诊断的审批式闭环。"],
+    train:   ["训练", "配置参数与数据, 经 SSH 在服务器启动 LlamaFactory 训练。"],
+    eval:    ["评测", "上传评测集, 服务器起 vLLM 推理, 本地 LLM judge 打分对比。"],
+    datagen: ["数据生成", "从知识库/种子自动构造 SFT 或 DPO 数据, 质量闸 + 语义去重。"],
+    deploy:  ["模型部署", "vLLM (docker) 部署训练产物或基座到服务器, 参数可配置。"],
+    data:    ["数据管理", "训练集/评测集本地注册、复用、删除。"],
+  };
+  for (const v of ["assistant", "train", "eval", "datagen", "deploy", "data"]) {
+    document.getElementById("view-" + v).style.display = which === v ? "grid" : "none";
+    document.getElementById("tab-" + v).classList.toggle("active", which === v);
+  }
+  const t = TITLES[which];
+  if (t) { document.getElementById("view-title").textContent = t[0];
+           document.getElementById("view-desc").textContent = t[1]; }
+  if (which === "deploy") loadDeployList();
+  if (which === "data") loadDataList();
+  if (window.TrainingAssistantUI) window.TrainingAssistantUI.onTabChanged(which);
+}
+
+function gpuColor(pct) {
+  return pct >= 85 ? "#ef4444" : pct >= 60 ? "#f59e0b" : "#22c55e";
+}
+
+async function refreshGpus() {
+  const el = document.getElementById("gpu-panel");
+  try {
+    const r = await fetch("/api/gpus");
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || "查询失败");
+    if (!d.gpus || !d.gpus.length) { el.innerHTML = '<span class="hint">显卡: 无数据</span>'; return; }
+    el.innerHTML = d.gpus.map(g => {
+      const used = typeof g.mem_used === "number" ? g.mem_used : 0;
+      const total = (typeof g.mem_total === "number" && g.mem_total) ? g.mem_total : 0;
+      const pct = total ? Math.round(used / total * 100) : 0;
+      const c = gpuColor(pct);
+      const totalTxt = total ? total : "?";
+      return `<div class="gpu-card" title="${g.name || ""}">
+        <div class="top"><span class="nm">#${g.index} ${g.name || ""}</span><span style="color:${c}">${pct}%</span></div>
+        <div class="gpu-bar"><i style="width:${pct}%;background:${c}"></i></div>
+        <div class="gpu-meta"><span>${used}/${totalTxt} MB</span><span>GPU ${g.util}%</span></div>
+      </div>`;
+    }).join("");
+  } catch (e) { el.innerHTML = '<span class="hint">显卡: ' + e.message + '</span>'; }
+}
+refreshGpus();
+setInterval(refreshGpus, 4000);
+
+async function refreshDisk() {
+  const el = document.getElementById("disk");
+  try {
+    const d = await (await fetch("/api/disk")).json();
+    const gb = (d.avail_bytes / (1 << 30));
+    el.textContent = "磁盘可用: " + gb.toFixed(1) + " GB";
+    el.style.color = gb < 5 ? "#ef4444" : "#64748b";
+  } catch { el.textContent = "磁盘: 查询失败"; }
+}
+refreshDisk();
+setInterval(refreshDisk, 30000);
+
+async function loadSchema() {
+  SCHEMA = await (await fetch("/api/schema")).json();
+  const form = document.getElementById("form");
+  form.innerHTML = "";
+  for (const g of SCHEMA.groups) {
+    const fs = document.createElement("fieldset");
+    const lg = document.createElement("legend");
+    lg.textContent = g.name;
+    fs.appendChild(lg);
+    for (const f of g.fields) fs.appendChild(fieldRow(g.name, f));
+    form.appendChild(fs);
+  }
+}
+
+function fieldRow(group, f) {
+  const row = document.createElement("div");
+  row.className = "row";
+  const lab = document.createElement("label");
+  lab.textContent = f.name;
+  row.appendChild(lab);
+  let el;
+  if (f.type === "select") {
+    el = document.createElement("select");
+    for (const o of f.enum) {
+      const opt = document.createElement("option");
+      opt.value = o; opt.textContent = o;
+      if (String(f.default) === o) opt.selected = true;
+      el.appendChild(opt);
+    }
+  } else if (f.type === "bool") {
+    el = document.createElement("select");
+    for (const o of ["true", "false"]) {
+      const opt = document.createElement("option");
+      opt.value = o; opt.textContent = o;
+      if (String(f.default) === o) opt.selected = true;
+      el.appendChild(opt);
+    }
+  } else {
+    el = document.createElement("input");
+    el.type = (f.type === "int" || f.type === "float") ? "number" : "text";
+    if (f.type === "float") el.step = "any";
+    if (f.default !== null && f.default !== undefined) el.value = f.default;
+  }
+  el.dataset.group = group; el.dataset.name = f.name; el.dataset.ftype = f.type;
+  if (f.readonly) el.setAttribute("readonly", "readonly"), el.disabled = true;
+  row.appendChild(el);
+  return row;
+}
+
+function collectParams() {
+  const out = {};
+  for (const g of SCHEMA.groups) out[g.name] = {};
+  document.querySelectorAll("#form [data-name]").forEach(el => {
+    const g = el.dataset.group, n = el.dataset.name, t = el.dataset.ftype;
+    if (el.disabled) return;                 // 只读字段 (dataset) 交给服务端
+    let v = el.value;
+    if (t === "bool") v = (v === "true");
+    else if (t === "int") v = v === "" ? null : parseInt(v, 10);
+    else if (t === "float") v = v === "" ? null : parseFloat(v);
+    else if (v === "") v = null;
+    if (v !== null) out[g][n] = v;
+  });
+  return out;
+}
+
+async function submit() {
+  const btn = document.getElementById("submit");
+  btn.disabled = true; setBadge("submitting", "提交中");
+  const fd = new FormData();
+  if (document.getElementById("datasrc").value === "datagen") syncStageForDatagenSelection();
+  fd.append("params", JSON.stringify(collectParams()));
+  fd.append("gpus", document.getElementById("gpus").value.trim());
+  // 数据来源: 上传文件 / 从生成任务导入 / 从数据集库选
+  const src = document.getElementById("datasrc").value;
+  if (src === "datagen") {
+    const dg = document.getElementById("datagen-pick").value;
+    if (!dg) { alert("请选择一个生成任务"); btn.disabled = false; return; }
+    fd.append("from_datagen_job", dg);
+  } else if (src === "dataset") {
+    const dn = document.getElementById("dataset-pick").value;
+    if (!dn) { alert("请选择一个训练集"); btn.disabled = false; return; }
+    fd.append("dataset_name", dn);
+  } else {
+    const file = document.getElementById("datafile").files[0];
+    if (!file) { alert("请选择训练数据文件"); btn.disabled = false; return; }
+    fd.append("file", file);
+  }
+  try {
+    const res = await fetch("/api/jobs", { method: "POST", body: fd });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "提交失败");
+    currentJob = data.job_id;
+    localStorage.setItem("lf_job", currentJob);
+    document.getElementById("jobid").textContent = currentJob;
+    document.getElementById("log").textContent = "";
+    connect(); refresh();
+  } catch (e) {
+    setBadge("failed", "失败"); alert(e.message);
+  } finally { btn.disabled = false; }
+}
+
+function toggleDataSrc() {
+  const src = document.getElementById("datasrc").value;
+  document.getElementById("src-upload").style.display = src === "datagen" || src === "dataset" ? "none" : "";
+  document.getElementById("src-datagen").style.display = src === "datagen" ? "" : "none";
+  document.getElementById("src-dataset").style.display = src === "dataset" ? "" : "none";
+  if (src === "datagen") loadDatagenForTrain();
+  if (src === "dataset") loadDatasetsForTrain();
+}
+
+async function loadDatasetsForTrain() {
+  const sel = document.getElementById("dataset-pick");
+  sel.innerHTML = "<option value=''>— 加载中 —</option>";
+  try {
+    const d = await (await fetch("/api/datasets?kind=train")).json();
+    const items = d.items || [];
+    if (!items.length) { sel.innerHTML = "<option value=''>— 无训练集, 去『数据』tab 注册 —</option>"; return; }
+    sel.innerHTML = items.map(x =>
+      `<option value="${x.name}">${x.name} · ${x.format} · ${x.n_records} 条</option>`
+    ).join("");
+  } catch (e) { sel.innerHTML = "<option value=''>加载失败</option>"; }
+}
+
+async function loadDatagenForTrain() {
+  const sel = document.getElementById("datagen-pick");
+  sel.innerHTML = "<option value=''>— 加载中 —</option>";
+  try {
+    const d = await (await fetch("/api/datagen/jobs")).json();
+    const done = (d.jobs || []).filter(j => j.status === "succeeded" && j.accepted > 0);
+    if (!done.length) { sel.innerHTML = "<option value=''>— 无已完成生成任务 —</option>"; return; }
+    sel.innerHTML = "";
+    for (const job of done) {
+      const option = document.createElement("option");
+      option.value = job.job_id;
+      option.textContent = DatagenUI.optionLabel(job);
+      option.dataset.finetune = DatagenUI.stageForJob(job);
+      sel.appendChild(option);
+    }
+    syncStageForDatagenSelection();
+  } catch (e) { sel.innerHTML = "<option value=''>加载失败</option>"; }
+}
+
+function syncStageForDatagenSelection() {
+  const sel = document.getElementById("datagen-pick");
+  const option = sel && sel.selectedOptions ? sel.selectedOptions[0] : null;
+  if (!option) return;
+  const stage = document.querySelector('#form [data-group="method"][data-name="stage"]');
+  if (stage) stage.value = option.dataset.finetune === "dpo" ? "dpo" : "sft";
+}
+
+document.getElementById("datagen-pick").onchange = syncStageForDatagenSelection;
+
+// ── checkpoint 管理 ──
+
+async function loadCheckpoints() {
+  const el = document.getElementById("ckpt-list");
+  if (!currentJob) { el.textContent = "请先选择一个训练任务"; return; }
+  el.textContent = "加载中…";
+  try {
+    const d = await (await fetch(`/api/jobs/${currentJob}/checkpoints`)).json();
+    const cks = d.checkpoints || [];
+    if (!cks.length) { el.textContent = "无 checkpoint (训练未到存盘步, 或 output_dir 为空)"; return; }
+    el.innerHTML = cks.map(c => {
+      const mb = (c.size_kb / 1024).toFixed(1);
+      return `<div class="row" style="margin:2px 0">
+        <span style="flex:1;font:11px ui-monospace,monospace">${c.name} · ${mb}MB</span>
+        <button class="ghost" type="button" onclick="resumeCkpt('${c.path}')">续训</button>
+        <button class="ghost" type="button" onclick="downloadCkpt('${c.name}')">下载</button>
+        <button class="ghost" type="button" onclick="cleanupCkpt('${c.name}')">删除</button>
+      </div>`;
+    }).join("");
+  } catch (e) { el.textContent = "查询失败: " + e.message; }
+}
+
+function resumeCkpt(path) {
+  // 把绝对路径填入 train.resume_from_checkpoint 输入框
+  const el = document.querySelector('#form [data-name="resume_from_checkpoint"]');
+  if (!el) { alert("表单无 resume_from_checkpoint 字段"); return; }
+  el.value = path;
+  el.scrollIntoView({behavior:"smooth", block:"center"});
+  el.style.background = "#3b3b1f";
+  setTimeout(() => el.style.background = "", 1200);
+  alert("已填入 resume_from_checkpoint, 提交即从该 checkpoint 续训 (output_dir 将复用原目录)");
+}
+
+function downloadCkpt(name) {
+  if (!currentJob) return;
+  window.open(`/api/jobs/${currentJob}/download?name=${name}`, "_blank");
+}
+
+async function cleanupCkpt(name) {
+  if (!currentJob) return;
+  if (!confirm(`确认删除 ${name}? 不可恢复。`)) return;
+  try {
+    const r = await fetch(`/api/jobs/${currentJob}/cleanup`, {
+      method: "POST", body: new URLSearchParams({checkpoint_name: name})});
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || "删除失败");
+    if (!d.deleted) alert("未删除: " + d.detail);
+    loadCheckpoints();
+  } catch (e) { alert(e.message); }
+}
+
+// ── 模型部署 ──
+
+let DEP_SCHEMA = null, depES = null, currentDeploy = null;
+
+async function loadDeploySchema() {
+  if (DEP_SCHEMA) return DEP_SCHEMA;
+  DEP_SCHEMA = await (await fetch("/api/deploy/schema")).json();
+  const form = document.getElementById("deploy-form");
+  form.innerHTML = "";
+  for (const f of DEP_SCHEMA.fields) {
+    const row = document.createElement("div");
+    row.className = "row";
+    const lbl = document.createElement("label");
+    lbl.textContent = f.name + (f.required ? " *" : "");
+    let el;
+    if (f.type === "bool") {
+      el = document.createElement("select");
+      el.innerHTML = `<option value="true">true</option><option value="false" ${!f.default?"selected":""}>false</option>`;
+    } else if (f.type === "int" || f.type === "float") {
+      el = document.createElement("input");
+      el.type = "number"; if (f.type === "float") el.step = "any";
+      el.value = f.default ?? "";
+    } else {
+      el = document.createElement("input");
+      el.value = f.default ?? "";
+    }
+    el.dataset.name = f.name; el.dataset.ftype = f.type;
+    if (f.required) el.required = true;
+    row.appendChild(lbl); row.appendChild(el);
+    form.appendChild(row);
+  }
+  return DEP_SCHEMA;
+}
+
+function collectDeploy() {
+  const out = {};
+  document.querySelectorAll("#deploy-form [data-name]").forEach(el => {
+    const n = el.dataset.name, t = el.dataset.ftype;
+    let v = el.value;
+    if (t === "bool") v = v === "true";
+    else if (t === "int") v = v === "" ? null : parseInt(v, 10);
+    else if (t === "float") v = v === "" ? null : parseFloat(v);
+    else if (v === "") v = null;
+    if (v !== null) out[n] = v;
+  });
+  return out;
+}
+
+async function submitDeploy() {
+  await loadDeploySchema();
+  const btn = document.getElementById("deploy-submit");
+  btn.disabled = true;
+  try {
+    const r = await fetch("/api/deploy", {
+      method: "POST", body: new URLSearchParams({config: JSON.stringify(collectDeploy())})});
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || "部署失败");
+    alert("已启动: " + d.container_name);
+    loadDeployList();
+  } catch (e) { alert(e.message); }
+  finally { btn.disabled = false; }
+}
+
+async function loadDeployList() {
+  const el = document.getElementById("deploy-list");
+  el.textContent = "加载中…";
+  try {
+    const d = await (await fetch("/api/deploy")).json();
+    const deps = d.deployments || [];
+    if (!deps.length) { el.textContent = "暂无部署"; return; }
+    const map = {running:"运行中", exited:"已退出", missing:"未运行", restarting:"重启中", unknown:"未知" };
+    el.innerHTML = deps.map(x => {
+      const cls = x.status === "running" ? "b-succeeded" : x.status === "missing" ? "b-unknown" : "b-failed";
+      return `<div class="row" style="margin:2px 0">
+        <span class="badge ${cls}" style="flex:0 0 auto">${map[x.status]||x.status}</span>
+        <span class="badge b-unknown" style="flex:0 0 auto" id="hlth-${x.name}">就绪…</span>
+        <span style="flex:1;font:11px ui-monospace,monospace;cursor:pointer" onclick="selectDeploy('${x.name}')">${x.name}</span>
+        <span class="hint">${x.ports || ""}</span>
+        <button class="ghost" type="button" onclick="viewDeployLog('${x.name}')">日志</button>
+        <button class="ghost" type="button" onclick="stopDeploy('${x.name}')">停止</button>
+        <button class="ghost" type="button" onclick="deleteDeploy('${x.name}')">删除</button>
+      </div>`;
+    }).join("");
+    // running 容器并发探健康 (非 running 不探)
+    deps.filter(x => x.status === "running").forEach(probeHealthBadge);
+  } catch (e) { el.textContent = "查询失败: " + e.message; }
+}
+
+async function probeHealthBadge(x) {
+  const el = document.getElementById(`hlth-${x.name}`);
+  if (!el) return;
+  try {
+    const h = await (await fetch(`/api/deploy/${x.name}/health`)).json();
+    if (h.ready) { el.className = "badge b-succeeded"; el.textContent = "就绪"; }
+    else { el.className = "badge b-interrupted"; el.textContent = h.detail || "未就绪"; }
+  } catch (e) { el.className = "badge b-failed"; el.textContent = "不可达"; }
+}
+
+function selectDeploy(name) {
+  currentDeploy = name;
+  document.getElementById("dep-current").textContent = name;
+  document.getElementById("dep-chat").textContent = "";
+  document.getElementById("dep-logbox").textContent = "";
+  connectDeployLog();
+  startMetricsPolling();
+}
+
+function viewDeployLog(name) { selectDeploy(name); }
+
+function connectDeployLog() {
+  if (!currentDeploy) return;
+  if (depES) depES.close();
+  depES = new EventSource(`/api/deploy/${currentDeploy}/logs`);
+  const box = document.getElementById("dep-logbox");
+  depES.onmessage = ev => { box.textContent += ev.data + "\n"; box.scrollTop = box.scrollHeight; };
+  // 出错即关闭, 不自动重连 (容器不存在时 docker logs 立即退出, 默认重连会风暴)
+  depES.onerror = () => {
+    box.textContent += "\n[日志连接结束]\n";
+    depES.close();
+  };
+}
+
+async function stopDeploy(name) {
+  if (!confirm(`停止并删除容器 ${name}?`)) return;
+  const r = await fetch(`/api/deploy/${name}/stop`, {method:"POST"});
+  const d = await r.json();
+  if (!r.ok) alert(d.detail || "失败"); loadDeployList();
+}
+
+async function deleteDeploy(name) {
+  if (!confirm(`彻底删除 ${name} (停止容器+删本地配置)?`)) return;
+  const r = await fetch(`/api/deploy/${name}`, {method:"DELETE"});
+  const d = await r.json();
+  if (!r.ok) alert(d.detail || "失败"); loadDeployList();
+}
+
+// ── 推理监控指标 ──
+
+let metricsTimer = null;
+
+function startMetricsPolling() {
+  if (metricsTimer) clearInterval(metricsTimer);
+  refreshMetrics();
+  metricsTimer = setInterval(refreshMetrics, 4000);
+}
+
+function fmtMs(s) {
+  if (s == null) return "—";
+  return (s * 1000).toFixed(0) + "ms";
+}
+function fmtPct(v) { return v == null ? "—" : (v * 100).toFixed(1) + "%"; }
+
+async function refreshMetrics() {
+  if (!currentDeploy) return;
+  const el = document.getElementById("dep-metrics");
+  try {
+    const m = await (await fetch(`/api/deploy/${currentDeploy}/metrics`)).json();
+    if (!Object.keys(m).length) { el.textContent = "无法获取指标 (容器未就绪或无配置)"; return; }
+    const kv = m.kv_cache, kvPct = kv != null ? kv * 100 : 0;
+    const kvColor = kvPct >= 90 ? "#ef4444" : kvPct >= 70 ? "#f59e0b" : "#22c55e";
+    const wait = m.waiting ?? 0, preempt = m.preemption ?? 0;
+    el.innerHTML = `
+      <div class="row"><label>KV 缓存</label>
+        <div style="flex:1;height:14px;background:#131c33;border-radius:7px;overflow:hidden">
+          <div style="height:100%;width:${Math.min(kvPct,100)}%;background:${kvColor};transition:width .4s"></div></div>
+        <span class="hint" style="flex:0 0 50px;text-align:right">${fmtPct(kv)}</span></div>
+      <div class="row"><label>队列 (运行/等待)</label>
+        <span class="badge ${wait>0?'b-interrupted':'b-succeeded'}">${m.running ?? "—"} / ${wait}</span>
+        ${wait > 0 ? '<span class="hint">等待堆积, 考虑调大 max_num_seqs</span>' : ''}</div>
+      <div class="row"><label>抢占次数</label>
+        <span class="badge ${preempt>0?'b-failed':'b-succeeded'}">${preempt}</span>
+        ${preempt > 0 ? '<span class="hint">发生抢占, 显存吃紧, 调小 max_num_seqs 或加大 gpu_memory_utilization</span>' : ''}</div>
+      <div class="row"><label>TTFT (首 token)</label>
+        <span class="hint">p50 ${fmtMs(m.ttft?.p50)} · p95 ${fmtMs(m.ttft?.p95)} · 均 ${fmtMs(m.ttft?.avg)}</span></div>
+      <div class="row"><label>TPOT (每 token)</label>
+        <span class="hint">p50 ${fmtMs(m.tpot?.p50)} · p95 ${fmtMs(m.tpot?.p95)} · 均 ${fmtMs(m.tpot?.avg)}</span></div>
+      <div class="row"><label>E2E 延迟</label>
+        <span class="hint">p50 ${fmtMs(m.e2e?.p50)} · p95 ${fmtMs(m.e2e?.p95)} · 均 ${fmtMs(m.e2e?.avg)}</span></div>`;
+  } catch (e) { el.textContent = "指标查询失败: " + e.message; }
+}
+
+// ── 在线试玩 chat ──
+
+let chatSending = false;
+async function sendDeployChat() {
+  if (!currentDeploy || chatSending) return;
+  const inp = document.getElementById("dep-chat-input");
+  const msg = inp.value.trim();
+  if (!msg) return;
+  const box = document.getElementById("dep-chat");
+  box.textContent += `🧑 ${msg}\n🤖 `;
+  inp.value = ""; chatSending = true;
+  try {
+    const r = await fetch(`/api/deploy/${currentDeploy}/chat`, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({
+        model: currentDeploy, messages: [{role: "user", content: msg}],
+        stream: true, temperature: 0.7,
+      }),
+    });
+    if (!r.ok) { const d = await r.json(); throw new Error(d.detail || "失败"); }
+    // 流式解析 SSE data: 行, 提取 delta.content
+    const reader = r.body.getReader();
+    const dec = new TextDecoder();
+    let buf = "";
+    while (true) {
+      const {value, done} = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, {stream: true});
+      const lines = buf.split("\n");
+      buf = lines.pop();
+      for (const ln of lines) {
+        if (!ln.startsWith("data: ")) continue;
+        const data = ln.slice(6).trim();
+        if (data === "[DONE]") continue;
+        try {
+          const delta = JSON.parse(data).choices?.[0]?.delta?.content;
+          if (delta) { box.textContent += delta; box.scrollTop = box.scrollHeight; }
+        } catch {}
+      }
+    }
+    box.textContent += "\n";
+  } catch (e) { box.textContent += `[失败: ${e.message}]\n`; }
+  finally { chatSending = false; }
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  const inp = document.getElementById("dep-chat-input");
+  if (inp) inp.addEventListener("keydown", e => {
+    if (e.key === "Enter") { e.preventDefault(); sendDeployChat(); }
+  });
+  const sendBtn = document.getElementById("dep-chat-send");
+  if (sendBtn) sendBtn.onclick = sendDeployChat;
+});
+
+// ── 数据管理 ──
+
+async function loadDataList() {
+  const el = document.getElementById("data-list");
+  el.textContent = "加载中…";
+  try {
+    const [tr, ev] = await Promise.all([
+      fetch("/api/datasets?kind=train").then(r=>r.json()),
+      fetch("/api/datasets?kind=eval").then(r=>r.json()),
+    ]);
+    const rows = [];
+    const render = (d, kind, label) => (d.items || []).map(x =>
+      `<div class="row" style="margin:2px 0">
+        <span class="badge b-unknown" style="flex:0 0 auto">${label}</span>
+        <span style="flex:1;font:11px ui-monospace,monospace">${x.name}</span>
+        <span class="hint">${x.n_records ?? x.format ?? ""} · ${(x.size_bytes/1024).toFixed(0)}KB</span>
+        <button class="ghost" type="button" onclick="deleteDataset('${x.name}','${kind}')">删除</button>
+      </div>`).join("");
+    rows.push(render(tr, "train", "训练"));
+    rows.push(render(ev, "eval", "评测"));
+    el.innerHTML = rows.join("") || "暂无数据集";
+  } catch (e) { el.textContent = "查询失败: " + e.message; }
+}
+
+async function submitDataset() {
+  const name = document.getElementById("ds-name").value.trim();
+  const kind = document.getElementById("ds-kind").value;
+  const file = document.getElementById("ds-file").files[0];
+  if (!name || !file) { alert("需填名称并选文件"); return; }
+  const btn = document.getElementById("ds-submit"); btn.disabled = true;
+  try {
+    const fd = new FormData();
+    fd.append("name", name); fd.append("kind", kind); fd.append("file", file);
+    const r = await fetch("/api/datasets", {method:"POST", body:fd});
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || "注册失败");
+    alert(`已注册: ${d.name} (${d.n_records} 条)`);
+    loadDataList();
+  } catch (e) { alert(e.message); }
+  finally { btn.disabled = false; }
+}
+
+async function deleteDataset(name, kind) {
+  if (!confirm(`删除 ${name}?`)) return;
+  const r = await fetch(`/api/datasets/${name}?kind=${kind}`, {method:"DELETE"});
+  if (!r.ok) { const d=await r.json(); alert(d.detail||"失败"); }
+  loadDataList();
+}
+
+function connect() {
+  if (!currentJob) return;
+  if (es) es.close();
+  es = new EventSource(`/api/jobs/${currentJob}/logs`);
+  const log = document.getElementById("log");
+  es.onmessage = ev => {
+    log.textContent += ev.data + "\n";
+    log.scrollTop = log.scrollHeight;
+  };
+  es.onerror = () => {/* EventSource 会自动重连 */};
+}
+
+async function refresh() {
+  if (!currentJob) return;
+  try {
+    const s = await (await fetch(`/api/jobs/${currentJob}`)).json();
+    const map = { running:"训练中", succeeded:"成功", failed:"失败",
+                  unknown:"未知", not_found:"不存在" };
+    setBadge(s.status, (map[s.status] || s.status) + (s.exit_code ? ` (code ${s.exit_code})` : ""));
+  } catch { setBadge("unknown", "状态查询失败"); }
+}
+
+function setBadge(cls, text) {
+  const b = document.getElementById("badge");
+  b.className = "badge b-" + cls; b.textContent = text;
+}
+
+async function stopJob() {
+  if (!currentJob) { alert("没有当前任务"); return; }
+  if (!confirm("确定停止任务 " + currentJob + " ? 会杀掉训练进程组并释放显存。")) return;
+  try {
+    const res = await fetch(`/api/jobs/${currentJob}/stop`, { method: "POST" });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "停止失败");
+    refresh();
+  } catch (e) { alert(e.message); }
+}
+
+async function refreshJobList() {
+  const el = document.getElementById("job-list");
+  try {
+    const d = await (await fetch("/api/jobs")).json();
+    if (!d.jobs || !d.jobs.length) { el.textContent = "暂无历史任务"; return; }
+    const map = { running:"运行中", succeeded:"成功", failed:"失败", unknown:"未知", not_found:"不存在", interrupted:"中断" };
+    el.innerHTML = d.jobs.map(j => {
+      const cls = "b-" + j.status;
+      const label = (map[j.status] || j.status) + (j.exit_code ? ` ${j.exit_code}` : "");
+      return `<div class="row" style="margin:2px 0;cursor:pointer" onclick="openJob('${j.job_id}','${j.kind}')">
+        <span class="badge ${cls}" style="flex:0 0 auto">${label}</span>
+        <span style="flex:1;font:11px ui-monospace,monospace">${j.job_id}</span>
+        <span class="hint">${j.kind}</span>
+      </div>`;
+    }).join("");
+  } catch (e) { el.textContent = "查询失败: " + e.message; }
+}
+
+function openJob(id, kind) {
+  if (kind === "eval") {
+    switchTab("eval");
+    evalId = id; localStorage.setItem("lf_eval", id);
+    document.getElementById("e-id").textContent = id;
+    document.getElementById("e-logbox").textContent = "";
+    connectEval(); refreshEval();
+    return;
+  }
+  currentJob = id; localStorage.setItem("lf_job", id);
+  document.getElementById("jobid").textContent = id;
+  document.getElementById("log").textContent = "";
+  connect(); refresh(); refreshMetrics(); loadCheckpoints();
+}
+
+document.getElementById("submit").onclick = submit;
+document.getElementById("reconnect").onclick = connect;
+document.getElementById("refresh").onclick = refresh;
+document.getElementById("stop").onclick = stopJob;
+document.getElementById("toggle-jobs").onclick = () => {
+  const el = document.getElementById("job-list");
+  const show = el.style.display === "none";
+  el.style.display = show ? "" : "none";
+  if (show) refreshJobList();
+};
+
+// 带坐标轴的折线图: X 轴固定 [0, xMax(总步数)], 每来一个点画一点,
+// 随训练推进从左向右逐渐填满整张图。
+function drawCurve(canvas, points, key, color, fmt, empty, xMax) {
+  const ctx = canvas.getContext("2d");
+  const W = canvas.width = canvas.clientWidth || 600, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+  const padL = 48, padB = 34, padT = 10, padR = 12;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+
+  const pts = points.filter(p => typeof p[key] === "number");
+  const xs = pts.map((p, i) => (p.step != null ? p.step : i + 1));
+  // epoch 与 step 线性: 用最新点的 epoch/step 比例推算任意刻度的 epoch
+  const epRef = points.filter(p => typeof p.epoch === "number" && p.step).slice(-1)[0];
+  const epPerStep = epRef ? epRef.epoch / epRef.step : 0;
+  const xhi = xMax || Math.max(1, ...xs);          // 总步数已知则固定, 否则退化为当前最大
+  let ylo = pts.length ? Math.min(...pts.map(p => p[key])) : 0;
+  let yhi = pts.length ? Math.max(...pts.map(p => p[key])) : 1;
+  if (ylo === yhi) { ylo -= 1; yhi += 1; }         // 单点时避免除零
+  const pad = (yhi - ylo) * 0.08; ylo -= pad; yhi += pad;
+
+  const sx = x => padL + plotW * (x / (xhi || 1));
+  const sy = y => padT + plotH * (1 - (y - ylo) / ((yhi - ylo) || 1));
+
+  // 坐标轴
+  ctx.strokeStyle = "#334155"; ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(padL, padT); ctx.lineTo(padL, padT + plotH);
+  ctx.lineTo(padL + plotW, padT + plotH); ctx.stroke();
+
+  ctx.fillStyle = "#64748b"; ctx.font = "10px ui-monospace, monospace";
+  ctx.strokeStyle = "rgba(148,163,184,0.10)";  // 淡网格
+  // Y 轴刻度 (4 格) + 横向网格线
+  ctx.textAlign = "right"; ctx.textBaseline = "middle";
+  for (let i = 0; i <= 4; i++) {
+    const v = ylo + (yhi - ylo) * i / 4, y = sy(v);
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(padL + plotW, y); ctx.stroke();
+    ctx.fillText(fmt(v), padL - 5, y);
+  }
+  // X 轴刻度 (5 格): 上行 step, 下行 epoch
+  ctx.textAlign = "center"; ctx.textBaseline = "top";
+  for (let i = 0; i <= 5; i++) {
+    const xv = xhi * i / 5, X = sx(xv);
+    ctx.fillStyle = "#64748b";
+    ctx.fillText(String(Math.round(xv)), X, padT + plotH + 4);
+    if (epPerStep) {
+      ctx.fillStyle = "#475569";
+      ctx.fillText("e" + (epPerStep * xv).toFixed(2), X, padT + plotH + 17);
+    }
+  }
+  ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+
+  if (!pts.length) {
+    ctx.fillStyle = "#64748b"; ctx.font = "12px sans-serif";
+    ctx.fillText(empty, padL + 8, padT + 18); return;
+  }
+  // 折线 + 数据点
+  ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.beginPath();
+  pts.forEach((p, i) => { const X = sx(xs[i]), Y = sy(p[key]); i ? ctx.lineTo(X, Y) : ctx.moveTo(X, Y); });
+  ctx.stroke();
+  ctx.fillStyle = color;
+  pts.forEach((p, i) => { ctx.beginPath(); ctx.arc(sx(xs[i]), sy(p[key]), 2, 0, 7); ctx.fill(); });
+}
+
+async function refreshMetrics() {
+  if (!currentJob) return;
+  try {
+    const d = await (await fetch(`/api/jobs/${currentJob}/metrics`)).json();
+    const pts = d.points || [];
+    const xMax = d.total_steps || 0;
+    drawCurve(document.getElementById("loss-chart"), pts, "loss", "#22c55e",
+      v => v.toFixed(3), "暂无 loss 数据 (开始训练后出现)", xMax);
+    drawCurve(document.getElementById("lr-chart"), pts, "lr", "#38bdf8",
+      v => v.toExponential(1), "暂无学习率数据", xMax);
+    const lossPts = pts.filter(p => typeof p.loss === "number");
+    if (lossPts.length) {
+      const last = lossPts[lossPts.length - 1];
+      document.getElementById("loss-latest").textContent =
+        last.loss.toFixed(4) + (last.epoch != null ? ` (epoch ${(+last.epoch).toFixed(2)})` : "");
+      const pct = d.percentage ? ` ${(+d.percentage).toFixed(1)}%` : "";
+      const eta = d.remaining_time ? ` · 剩余 ${d.remaining_time}` : "";
+      document.getElementById("loss-prog").textContent =
+        (last.step != null ? last.step : "?") + "/" + (d.total_steps || "?") + pct + eta;
+      if (typeof last.lr === "number")
+        document.getElementById("lr-latest").textContent = last.lr.toExponential(3);
+    }
+  } catch { /* 忽略轮询错误 */ }
+}
+
+loadSchema();
+if (currentJob) {
+  document.getElementById("jobid").textContent = currentJob;
+  connect(); refresh();
+  setInterval(refresh, 10000);
+}
+refreshMetrics();
+setInterval(refreshMetrics, 5000);
+
+// ─────────── 评测页 ───────────
+let evalId = localStorage.getItem("lf_eval") || null, ees = null;
+
+async function loadEvalSchema() {
+  const s = await (await fetch("/api/eval/schema")).json();
+  document.getElementById("p-fc").value = s.default_fc_param_prompt;
+  document.getElementById("p-subj").value = s.default_subjective_prompt;
+  // 微调任务 ID 默认填训练页最近任务
+  if (currentJob) document.getElementById("ft-job").value = currentJob;
+}
+
+function parseBaseModels() {
+  const out = [];
+  document.getElementById("base-models").value.split("\n").forEach(line => {
+    line = line.trim();
+    if (!line) return;
+    const i = line.indexOf("=");
+    if (i < 0) return;
+    out.push({ name: line.slice(0, i).trim(), model_name_or_path: line.slice(i + 1).trim() });
+  });
+  return out;
+}
+
+async function submitEval() {
+  const taskTypes = [];
+  if (document.getElementById("t-fc").checked) taskTypes.push("function_call");
+  if (document.getElementById("t-subj").checked) taskTypes.push("subjective");
+  if (!taskTypes.length) { alert("至少选一个任务类型"); return; }
+
+  const models = parseBaseModels();
+  const finetuned = [];
+  const ftName = document.getElementById("ft-name").value.trim();
+  const ftJob = document.getElementById("ft-job").value.trim();
+  if (ftJob) finetuned.push({ name: ftName || "finetuned", job_id: ftJob });
+  if (!models.length && !finetuned.length) { alert("至少选一个模型"); return; }
+
+  const cfg = {
+    models, finetuned_jobs: finetuned, task_types: taskTypes,
+    gpus: document.getElementById("e-gpus").value.trim(),
+    fc_param_prompt: document.getElementById("p-fc").value,
+    subjective_prompt: document.getElementById("p-subj").value,
+  };
+  const fd = new FormData();
+  fd.append("config", JSON.stringify(cfg));
+  const fcFile = document.getElementById("fc-file").files[0];
+  const subjFile = document.getElementById("subj-file").files[0];
+  if (fcFile) fd.append("fc_file", fcFile);
+  if (subjFile) fd.append("subjective_file", subjFile);
+
+  const btn = document.getElementById("e-submit");
+  btn.disabled = true; setEBadge("submitting", "提交中");
+  try {
+    const res = await fetch("/api/eval/jobs", { method: "POST", body: fd });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "提交失败");
+    evalId = data.eval_id;
+    localStorage.setItem("lf_eval", evalId);
+    document.getElementById("e-id").textContent = evalId;
+    document.getElementById("e-logbox").textContent = "";
+    connectEval(); refreshEval();
+  } catch (e) { setEBadge("failed", "失败"); alert(e.message); }
+  finally { btn.disabled = false; }
+}
+
+function connectEval() {
+  if (!evalId) return;
+  if (ees) ees.close();
+  ees = new EventSource(`/api/eval/jobs/${evalId}/logs`);
+  const box = document.getElementById("e-logbox");
+  ees.onmessage = ev => { box.textContent += ev.data + "\n"; box.scrollTop = box.scrollHeight; };
+  ees.onerror = () => {};
+}
+
+async function refreshEval() {
+  if (!evalId) return;
+  try {
+    const s = await (await fetch(`/api/eval/jobs/${evalId}`)).json();
+    const map = { running:"推理中", succeeded:"推理完成", failed:"失败", unknown:"未知", not_found:"不存在" };
+    setEBadge(s.status, (map[s.status] || s.status) + (s.exit_code ? ` (code ${s.exit_code})` : ""));
+  } catch { setEBadge("unknown", "状态查询失败"); }
+}
+
+async function scoreEval() {
+  if (!evalId) { alert("还没有评测任务"); return; }
+  const btn = document.getElementById("e-score");
+  btn.disabled = true; document.getElementById("report").textContent = "打分中…";
+  try {
+    const res = await fetch(`/api/eval/jobs/${evalId}/score`, { method: "POST" });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "打分失败");
+    document.getElementById("report").textContent = data.report_md || JSON.stringify(data.per_model, null, 2);
+  } catch (e) { document.getElementById("report").textContent = "打分失败: " + e.message; }
+  finally { btn.disabled = false; }
+}
+
+function setEBadge(cls, text) {
+  const b = document.getElementById("e-badge");
+  b.className = "badge b-" + cls; b.textContent = text;
+}
+
+document.getElementById("e-submit").onclick = submitEval;
+document.getElementById("e-reconnect").onclick = connectEval;
+document.getElementById("e-refresh").onclick = refreshEval;
+document.getElementById("e-score").onclick = scoreEval;
+
+loadEvalSchema();
+if (evalId) {
+  document.getElementById("e-id").textContent = evalId;
+  connectEval(); refreshEval();
+  setInterval(refreshEval, 10000);
+}
+
+// ─────────── 数据生成页 ───────────
+let dgId = localStorage.getItem("lf_dg") || null, dges = null, DG_SCHEMA = null;
+
+async function loadDgSchema() {
+  DG_SCHEMA = await (await fetch("/api/datagen/schema")).json();
+  applyDgPrompts();
+  applyDgTaskVisibility();
+}
+
+function applyDgPrompts() {
+  if (!DG_SCHEMA) return;
+  const ft = document.getElementById("dg-finetune").value;
+  const t = document.getElementById("dg-task").value;
+  const mode = document.getElementById("dg-mode").value;
+  const keys = DatagenUI.promptKeys(ft, t, mode);
+  document.getElementById("dg-genp").value = DG_SCHEMA[keys.gen] || "";
+  document.getElementById("dg-judgep").value = DG_SCHEMA[keys.judge] || "";
+  document.getElementById("dg-rejectedp").value = keys.rejected ? (DG_SCHEMA[keys.rejected] || "") : "";
+  document.getElementById("dg-pairp").value = keys.pairJudge ? (DG_SCHEMA[keys.pairJudge] || "") : "";
+}
+
+function applyDgTaskVisibility() {
+  const ft = document.getElementById("dg-finetune").value;
+  const t = document.getElementById("dg-task").value;
+  const multi = t === "qa" && document.getElementById("dg-mode").value !== "single";
+  document.querySelectorAll("#view-datagen [data-task]").forEach(el => {
+    let show = el.dataset.task.split(",").includes(t);
+    if (show && el.classList.contains("dg-multi")) show = multi;  // 多篇专属行仅多篇模式显示
+    el.style.display = show ? "" : "none";
+  });
+  document.querySelectorAll("#view-datagen .dg-dpo").forEach(el => {
+    el.style.display = ft === "dpo" ? "" : "none";
+  });
+}
+
+document.getElementById("dg-finetune").onchange = () => { applyDgPrompts(); applyDgTaskVisibility(); };
+document.getElementById("dg-task").onchange = () => { applyDgPrompts(); applyDgTaskVisibility(); };
+document.getElementById("dg-mode").onchange = () => { applyDgPrompts(); applyDgTaskVisibility(); };
+
+async function submitDatagen() {
+  const ft = document.getElementById("dg-finetune").value;
+  const t = document.getElementById("dg-task").value;
+  const mode = document.getElementById("dg-mode").value;
+  const cfg = DatagenUI.buildConfig({
+    finetuneType: ft, taskType: t, mode,
+    count: document.getElementById("dg-count").value,
+    kbSourceDir: document.getElementById("dg-kbdir").value,
+    fcSeedFile: document.getElementById("dg-seed").value,
+    minLen: document.getElementById("dg-minlen").value,
+    temperature: document.getElementById("dg-temp").value,
+    judgeMinScore: document.getElementById("dg-minscore").value,
+    groundingCheck: document.getElementById("dg-ground").value,
+    dedupThreshold: document.getElementById("dg-dedup").value,
+    attemptMultiplier: document.getElementById("dg-mult").value,
+    collection: document.getElementById("dg-coll").value,
+    nDocs: document.getElementById("dg-ndocs").value,
+    neighborTopK: document.getElementById("dg-topk").value,
+    genPrompt: document.getElementById("dg-genp").value,
+    judgePrompt: document.getElementById("dg-judgep").value,
+    rejectedPrompt: document.getElementById("dg-rejectedp").value,
+    pairJudgePrompt: document.getElementById("dg-pairp").value,
+  });
+  const fd = new FormData();
+  fd.append("config", JSON.stringify(cfg));
+  const btn = document.getElementById("dg-submit");
+  btn.disabled = true; setDgBadge("submitting", "提交中");
+  try {
+    const res = await fetch("/api/datagen/jobs", { method: "POST", body: fd });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "提交失败");
+    dgId = data.job_id;
+    localStorage.setItem("lf_dg", dgId);
+    document.getElementById("dg-id").textContent = dgId;
+    document.getElementById("dg-type").textContent = (data.finetune_type || "sft").toUpperCase();
+    document.getElementById("dg-logbox").textContent = "";
+    document.getElementById("dg-download").style.display = "none";
+    connectDg(); refreshDg();
+  } catch (e) { setDgBadge("failed", "失败"); alert(e.message); }
+  finally { btn.disabled = false; }
+}
+
+function connectDg() {
+  if (!dgId) return;
+  if (dges) dges.close();
+  dges = new EventSource(`/api/datagen/jobs/${dgId}/logs`);
+  const box = document.getElementById("dg-logbox");
+  dges.onmessage = ev => { box.textContent += ev.data + "\n"; box.scrollTop = box.scrollHeight; };
+  dges.onerror = () => {};
+}
+
+async function refreshDg() {
+  if (!dgId) return;
+  try {
+    const s = await (await fetch(`/api/datagen/jobs/${dgId}`)).json();
+    const map = { running:"生成中", succeeded:"完成", failed:"失败", unknown:"未知", not_found:"不存在" };
+    setDgBadge(s.status, map[s.status] || s.status);
+    document.getElementById("dg-type").textContent = (s.finetune_type || "sft").toUpperCase();
+    if (s.target != null)
+      document.getElementById("dg-prog").textContent =
+        `接受 ${s.accepted || 0}/${s.target} · 尝试 ${s.attempts || 0}`;
+    if (s.status === "succeeded") {
+      loadDgReport();
+      const dl = document.getElementById("dg-download");
+      dl.href = `/api/datagen/jobs/${dgId}/download`;
+      dl.style.display = "";
+    }
+  } catch { setDgBadge("unknown", "状态查询失败"); }
+}
+
+async function loadDgReport() {
+  try {
+    const r = await fetch(`/api/datagen/jobs/${dgId}/report`);
+    if (!r.ok) return;
+    const d = await r.json();
+    document.getElementById("dg-report").textContent = d.report_md;
+  } catch {}
+}
+
+async function stopDatagen() {
+  if (!dgId) { alert("没有当前任务"); return; }
+  if (!confirm("停止生成 " + dgId + " ?")) return;
+  try {
+    const res = await fetch(`/api/datagen/jobs/${dgId}/stop`, { method: "POST" });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.detail || "停止失败");
+    refreshDg();
+  } catch (e) { alert(e.message); }
+}
+
+function setDgBadge(cls, text) {
+  const b = document.getElementById("dg-badge");
+  b.className = "badge b-" + cls; b.textContent = text;
+}
+
+document.getElementById("dg-submit").onclick = submitDatagen;
+document.getElementById("dg-reconnect").onclick = connectDg;
+document.getElementById("dg-refresh").onclick = refreshDg;
+document.getElementById("dg-stop").onclick = stopDatagen;
+
+loadDgSchema();
+if (dgId) {
+  document.getElementById("dg-id").textContent = dgId;
+  document.getElementById("dg-download").href = `/api/datagen/jobs/${dgId}/download`;
+  connectDg(); refreshDg();
+  setInterval(refreshDg, 8000);
+}
+
+document.getElementById("deploy-submit").onclick = submitDeploy;
+document.getElementById("ds-submit").onclick = submitDataset;
+loadDeploySchema();
+</script>
+</body>
+</html>

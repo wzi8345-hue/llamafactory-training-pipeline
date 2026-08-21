@@ -1,0 +1,47 @@
+# Credentials and machine-local configuration
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*_rsa
+*_ed25519
+local_api_config.yaml
+llamafactory_pipeline/server_config.yaml
+
+# Training data, generated artifacts, checkpoints, and model weights
+sft_data/
+llamafactory_pipeline/eval_results/
+llamafactory_pipeline/assistant_state/
+eval/rag_eval_plan/results/
+checkpoints/
+outputs/
+*.safetensors
+*.ckpt
+*.pt
+*.pth
+
+# Local databases and logs
+*.db
+*.db.lock
+*.sqlite
+*.sqlite.*
+logs/
+*.log
+
+# Python and test caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.benchmarks/
+*.egg-info/
+.venv/
+.venv-api/
+venv/
+
+# Frontend and editor artifacts
+node_modules/
+.DS_Store
+.idea/
+.vscode/
+*.swp
